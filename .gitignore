@@ -1,3 +1,51 @@
 node_modules/
 dist/
+
+# 인증정보 — 절대 커밋하지 않는다
 .env
+.env.*
+!.env.example
+cookies.txt
+
+# 대용량 원자료 — 저장소에 담지 않는다. 받는 법은 README 참조
+data/raw/ngii/
+data/raw/ngii_pop/
+data/raw/gg_ride/
+data/raw/N37E127.hgt
+data/raw/admdong_20260701.geojson
+data/raw/dasan_rows*.csv
+data/*.npz
+data/*.npy
+data/seongnam_admdong_20260701.geojson
+
+# 작업 중 받은 페이지 덤프
+*.html
+!output/분석보고서_55번.html
+law_text.txt
+drf_law.xml
+drf_search.xml
+articles*.json
+law_*.json
+koreashe_post.json
+common.js
+layout.js
+lsLink.js
+lsMakeJo.js
+lsOutPutJoNew.js
+lsPopLayer.js
+
+# 제출본과 무관한 작업 문서 — 공개 저장소에 넣지 않는다
+인수인계*.md
+사례_최종후보.md
+사례후보_*.md
+상대원3동_5곳.md
+킵한장소_목록.md
+현장확인_자료.md
+네이버좌표.md
+보고서_초안_급행재편.md
+보고서_초안_급행재편*.md
+보고서재료_데이터와AI.md
+보고서재료_*.md
+88-1_55번_분석기록.md.bak
+공유_자료패키지/
+공유_자료패키지_2차/
