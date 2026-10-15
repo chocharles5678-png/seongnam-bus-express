@@ -21,6 +21,7 @@ data/seongnam_admdong_20260701.geojson
 # 작업 중 받은 페이지 덤프
 *.html
 !output/분석보고서_55번.html
+!output/분석보고서_350번.html
 law_text.txt
 drf_law.xml
 drf_search.xml
@@ -49,3 +50,7 @@ lsPopLayer.js
 88-1_55번_분석기록.md.bak
 공유_자료패키지/
 공유_자료패키지_2차/
+복구_대화기록_*.md
+자료전달_*.md
+*.bak
+1차 초안.pdf
