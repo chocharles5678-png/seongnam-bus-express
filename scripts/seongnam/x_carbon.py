@@ -1,51 +1,107 @@
-"""탄소 보조 추정 — 급행 재편의 수단전환 효과 시나리오
-(a) 본 틀은 '감축의 선행조건'이고, 이 스크립트는 (b) 보조 추정만 담당한다.
-※ 아래 ASSUMP의 값은 전부 가정이다. 출처가 확정되기 전에는 결과를 단정하지 말 것.
+# -*- coding: utf-8 -*-
+"""급행 재편의 탄소 순효과 — 주행거리 변화와 정차 횟수 변화를 함께 센다
+사용: python scripts/seongnam/x_carbon.py [--route 350] [--fleet 19] [--express 5]
+
+왜 필요한가
+  급행은 정차를 건너뛰므로 왕복 1회 배출이 완행보다 적다. 그러나 왕복시간이 짧아져
+  같은 시간에 더 돌면 총 주행거리가 늘어 상쇄된다. 둘을 함께 세지 않으면 어느 쪽도 말할 수 없다.
+
+두 운영 시나리오
+  A 쉬지않고  급행이 아낀 시간만큼 왕복을 더 돈다 → 주행거리 증가, 정차 감소
+  B 횟수유지  아낀 시간을 회차 여유로 둔다 → 주행거리 그대로, 정차만 감소
+
+정차 1회 손실 = 감속으로 버린 운동에너지를 재가속으로 회복하는 연료 + 체류 중 공회전
+  E = ½mv² / 구동효율 / 연료발열량 × 배출계수  +  공회전연료 × 체류시간 × 배출계수
+  제동 회생이 없는 내연 차량 기준이며, 신호·정체로 어차피 멈추는 경우를 빼지 않아
+  절감량의 상한으로 읽어야 한다.
+
+주행거리 기준은 한국교통안전공단 「용도별 차종별 연료별 일평균 자동차주행거리」(2022)의
+경기 사업형 승합차 기타연료(CNG) 222.4 km/대·일을 쓴다. data.go.kr/data/15088454
 """
-import csv,io,sys,json,glob,math
-sys.stdout=io.TextIOWrapper(sys.stdout.buffer,encoding='utf-8',errors='replace')
-ASSUMP=dict(
-  car_g_km   = None,   # 승용차 CO2 배출계수 g/km  ← 미검증. 환경부 자동차 온실가스 관리제도 등에서 확정할 것
-  bus_g_pkm  = None,   # 버스 CO2 배출원단위 g/인km ← 미검증
-  occupancy  = 1.2,    # 승용차 평균 재차인원(명) ← 미검증. 국가교통DB 확인 필요
-  trip_share = 1/3,    # 전환 통행 1건의 평균 주행거리 = 노선 편도 길이의 이 비율 (가정)
-  shift_rates= (0.02,0.05,0.10),   # 급행 이용자 중 승용차에서 전환한 비율 시나리오
-  days       = 250,    # 연간 환산 일수(평일 기준, 가정)
-)
-ROUTE={'88-1':dict(csv='data/express_88_1.csv'),'32':dict(csv='data/express_32.csv')}
-routes={}
-for f in glob.glob('data/raw/gg_busroute/getBusRouteInfoItemv2_*.json'):
-    b=json.load(open(f,encoding='utf-8'))['response']['msgBody']['busRouteInfoItem']
-    if isinstance(b,list): b=b[0]
-    routes[str(b['routeId'])]=(str(b.get('routeName')),b.get('routeTypeName',''))
-def hav(a,b):
-    R=6371000;p=math.pi/180
-    h=math.sin((b[1]-a[1])*p/2)**2+math.cos(a[1]*p)*math.cos(b[1]*p)*math.sin((b[0]-a[0])*p/2)**2
-    return 2*R*math.asin(math.sqrt(h))
-print('■ 전제 — 아래는 전부 가정값이다')
-for k,v in ASSUMP.items(): print(f'   {k:<12}{v}' + ('   ← 출처 확정 필요' if v is None else ''))
+import csv, io, sys, argparse
+sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+
+ap = argparse.ArgumentParser()
+ap.add_argument('--route', default='350')
+ap.add_argument('--fleet', type=int, default=19)
+ap.add_argument('--express', type=int, default=5)
+ap.add_argument('--cycle', type=float, default=150.0, help='완행 왕복 실측(분)')
+ap.add_argument('--km', type=float, default=40.0, help='왕복 거리(km) — 정류소 좌표 기반 추정')
+ap.add_argument('--vkt', type=float, default=222.4, help='대당 일평균 주행(km) — 교통안전공단 2022')
+ap.add_argument('--T', type=float, default=20, help='정차 1회당 손실시간(초) — 체류시간으로도 쓴다')
+a = ap.parse_args()
+
+CNG_MJ, CNG_CO2, IDLE_KG_H = 50.0, 2.75, 0.4     # MJ/kg, kgCO2/kg, 공회전 kg/h
+
+R = list(csv.DictReader(open(f'data/express_{a.route}.csv', encoding='utf-8-sig')))
+ns = lambda r: len(r['순서'].split(','))
+S_ALL = sum(ns(r) for r in R)
+S_EXP = sum(ns(r) for r in R if r['급행정차'] == '정차')
+SKIP = S_ALL - S_EXP
+CYC_E = a.cycle - SKIP * a.T / 60
+
+
+def stop_co2(m, v_kmh, eta=0.30):
+    """정차 1회가 더 물리는 배출(kgCO2)"""
+    kin_mj = 0.5 * m * (v_kmh / 3.6) ** 2 / 1e6
+    return (kin_mj / eta / CNG_MJ + IDLE_KG_H * a.T / 3600) * CNG_CO2
+
+
+LOC = a.fleet - a.express
+base_km = a.fleet * a.vkt
+base_rt = base_km / a.km
+base_stop = base_rt * S_ALL
+
+# A — 급행이 아낀 시간만큼 더 돈다
+a_km = LOC * a.vkt + a.express * a.vkt * (a.cycle / CYC_E)
+a_stop = (LOC * a.vkt / a.km) * S_ALL + (a.express * a.vkt * (a.cycle / CYC_E) / a.km) * S_EXP
+# B — 왕복 횟수를 현행과 같게 유지
+b_exp_rt, b_loc_rt = base_rt * a.express / a.fleet, base_rt * LOC / a.fleet
+b_km = (b_exp_rt + b_loc_rt) * a.km
+b_stop = b_loc_rt * S_ALL + b_exp_rt * S_EXP
+
+print(f'■ {a.route}번 · 관측 {a.fleet}대 중 급행 {a.express}대 · 완행 왕복 {a.cycle:.0f}분 / '
+      f'급행 왕복 {CYC_E:.0f}분 · 왕복 정차 {S_ALL}회 → 급행 {S_EXP}회(통과 {SKIP}회)\n')
+print('■ 1. 운행 구조 (일 단위)')
+print(f'  {"":12}{"주행거리":>12}{"정차 횟수":>12}')
+print(f'  {"현행":12}{base_km:>10.0f} km{base_stop:>10.0f} 회')
+print(f'  {"A 쉬지않고":12}{a_km:>10.0f} km{a_stop:>10.0f} 회   '
+      f'({a_km/base_km-1:+.1%} / {a_stop/base_stop-1:+.1%})')
+print(f'  {"B 횟수유지":12}{b_km:>10.0f} km{b_stop:>10.0f} 회   '
+      f'({b_km/base_km-1:+.1%} / {b_stop/base_stop-1:+.1%})\n')
+
+PARAMS = [(11000, 25, '보수'), (13000, 30, '중간'), (16000, 35, '적극')]
+print('■ 2. 왕복 1회당 배출 (총 배출계수 e를 주행분과 정차분으로 분해)')
+print(f'  {"가정":22}{"정차1회":>9}{"완행 왕복":>11}{"급행 왕복":>11}{"차이":>11}')
+for e_tot in (1.0, 1.1, 1.3):
+    for m, v, lab in PARAMS:
+        if lab != '중간':
+            continue
+        s = stop_co2(m, v)
+        cruise = (base_km * e_tot - base_stop * s) / base_km
+        loc_rt_co2, exp_rt_co2 = a.km * cruise + S_ALL * s, a.km * cruise + S_EXP * s
+        print(f'  e={e_tot:.1f} {lab}({m}kg {v}km/h) {s:>8.3f}{loc_rt_co2:>10.1f}kg'
+              f'{exp_rt_co2:>10.1f}kg{exp_rt_co2-loc_rt_co2:>9.1f}kg '
+              f'({exp_rt_co2/loc_rt_co2-1:+.0%})')
 print()
-for name,cf in ROUTE.items():
-    rows=list(csv.DictReader(open(cf['csv'],encoding='utf-8-sig')))
-    rid=[k for k,v in routes.items() if v==(name,'마을버스')][0]
-    A=json.load(open(f'data/raw/gg_routestation/{rid}.json',encoding='utf-8'))['response']['msgBody']['busRouteStationList']
-    pts=[(float(s['x']),float(s['y'])) for s in A]
-    rt_km=sum(hav(pts[i],pts[i+1]) for i in range(len(pts)-1))/1000
-    one_way=rt_km/2
-    use=sum(float(r['왕복일평균']) for r in rows if r['급행정차']=='정차')   # 승차+하차 건수
-    trips=use/2                                                            # 통행 수로 환산
-    d_km=one_way*ASSUMP['trip_share']
-    print(f'── {name}번  (왕복 {rt_km:.1f}km, 편도 {one_way:.1f}km / 급행 정차역 일평균 이용 {use:,.0f}건 = 통행 약 {trips:,.0f}건)')
-    print(f'   전환 통행 1건의 승용차 주행거리 가정 {d_km:.1f}km')
-    for s in ASSUMP['shift_rates']:
-        shifted=trips*s
-        veh_km=shifted*d_km/ASSUMP['occupancy']
-        if ASSUMP['car_g_km'] is None:
-            print(f'   전환율 {s*100:>4.0f}% → 전환 통행 {shifted:>7,.0f}건/일, 줄어드는 승용차 주행 {veh_km:>8,.0f} km/일 '
-                  f'({veh_km*ASSUMP["days"]/1000:>7,.0f} 천km/년)  → tCO2 = 배출계수 확정 후 산출')
-        else:
-            t=veh_km*ASSUMP['car_g_km']/1e6*ASSUMP['days']
-            print(f'   전환율 {s*100:>4.0f}% → {veh_km:>8,.0f} km/일 → 연 {t:>7,.0f} tCO2')
-    print()
-print('※ 이 추정은 급행 이용자 중 일부가 승용차에서 전환한다는 가정에 전적으로 의존한다.')
-print('※ 반대 방향 효과(통과 정류장의 배차 감소 → 자동차 이탈)는 반영되지 않았다. 순효과는 알 수 없다.')
+
+print('■ 3. 일일 총 배출 변화')
+print(f'  {"가정":26}{"현행":>11}{"A 쉬지않고":>14}{"B 횟수유지":>14}')
+rows = []
+for e_tot in (1.0, 1.1, 1.3):
+    for m, v, lab in PARAMS:
+        s = stop_co2(m, v)
+        cruise = (base_km * e_tot - base_stop * s) / base_km
+        if cruise <= 0:
+            continue
+        now = base_km * e_tot
+        A = a_km * cruise + a_stop * s
+        B = b_km * cruise + b_stop * s
+        rows.append((A / now - 1, B / now - 1))
+        print(f'  e={e_tot:.1f} {lab}({m//1000}t {v}km/h){" ":6}{now:>9.0f}kg'
+              f'{A-now:>+10.0f}kg({A/now-1:+.1%}){B-now:>+10.0f}kg({B/now-1:+.1%})')
+lo_a, hi_a = min(r[0] for r in rows), max(r[0] for r in rows)
+lo_b, hi_b = min(r[1] for r in rows), max(r[1] for r in rows)
+print(f'\n  → A 쉬지않고 {lo_a:+.1%} ~ {hi_a:+.1%}   |   B 횟수유지 {lo_b:+.1%} ~ {hi_b:+.1%}')
+print('\n※ 상한 추정이다. 신호·정체로 어차피 멈추는 경우를 빼지 않았고, 350번의 실제 연료를'
+      '\n   확인하지 않아 경기 사업형 승합 CNG 통계를 대리값으로 썼다.')

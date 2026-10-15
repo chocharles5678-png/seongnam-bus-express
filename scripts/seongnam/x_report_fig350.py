@@ -27,7 +27,9 @@ ROUTES = [('88_1', '88-1', 4, 98.0), ('380', '380', 10, 200.0),
           ('55', '55', 18, 195.0), ('350', '350', 19, 150.0)]
 
 
-def model(key, fleet, cycle):
+def model(key, fleet, cycle, keep_trips=False):
+    """keep_trips=True면 급행이 아낀 시간을 회차 여유로 두어 왕복 횟수를 현행과 같게 유지한다.
+    급행 간격이 cycle/E가 되고 총 주행거리가 늘지 않는다(탄소 비교용)."""
     R = list(csv.DictReader(open(f'data/express_{key}.csv', encoding='utf-8-sig')))
     ns = lambda r: len(r['순서'].split(','))
     skip = sum(ns(r) for r in R) - sum(ns(r) for r in R if r['급행정차'] == '정차')
@@ -43,10 +45,11 @@ def model(key, fleet, cycle):
         return (g**2).sum() / (2 * g.sum())
 
     w0 = wait([cycle / fleet])
+    head = cycle if keep_trips else cyc_e      # 급행 간격을 정하는 주기
     out = []
     for E in range(1, fleet):
         M = fleet - E
-        he, hl = cyc_e / E, cycle / M
+        he, hl = head / E, cycle / M
         n_use = gain - (wait([he, hl]) - w0)
         n_non = -(wait([hl]) - w0)
         out.append(dict(E=E, M=M, he=he, hl=hl, n_use=n_use, n_non=n_non,
@@ -101,20 +104,20 @@ fig.tight_layout()
 fig.savefig('figures/배차역설_4개노선.png', dpi=190, bbox_inches='tight', facecolor='white')
 print('-> figures/배차역설_4개노선.png')
 
-# ───────────────────────── 그림 2. 350 무증차 재편
-m = model('350', 19, 150.0)
-m55 = model('55', 18, 195.0)
-rows = m['rows']
+# ───────────────────────── 그림 2. 350 무증차 재편 — 운영 방식 B(왕복 횟수 유지)
+mB = model('350', 19, 150.0, keep_trips=True)    # 제안: 아낀 시간을 회차 여유로
+mA = model('350', 19, 150.0)                     # 대안: 쉬지 않고 더 돈다
+rows = mB['rows']
 E = [r['E'] for r in rows]
 
-fig, (ax, ax2) = plt.subplots(1, 2, figsize=(12.6, 4.6),
-                              gridspec_kw=dict(width_ratios=[1.55, 1]))
+fig, (ax, ax2) = plt.subplots(1, 2, figsize=(12.8, 4.6),
+                              gridspec_kw=dict(width_ratios=[1.5, 1]))
 
 ax.axhline(0, color=INK2, lw=0.9)
 ax.plot(E, [r['n_use'] for r in rows], '-o', color=C1, ms=4.5, lw=1.9,
-        label=f"급행 이용 가능 통행 ({m['p']*100:.0f}%)")
+        label=f"급행 이용 가능 통행 ({mB['p']*100:.0f}%)")
 ax.plot(E, [r['n_non'] for r in rows], '-s', color=C2, ms=4.5, lw=1.9,
-        label=f"급행 이용 불가 통행 ({(1-m['p'])*100:.0f}%)")
+        label=f"급행 이용 불가 통행 ({(1-mB['p'])*100:.0f}%)")
 ax.plot(E, [r['net'] for r in rows], '-^', color=INK, ms=5.5, lw=2.3, label='전체 평균')
 ax.set_title('350번 무증차 — 관측 19대를 급행과 완행으로 나눈다', fontsize=11, color=INK, pad=9)
 ax.set_xlabel('급행으로 돌리는 차량 수(대)', fontsize=9.5, color=INK2)
@@ -128,12 +131,12 @@ axr = ax.twinx()
 axr.plot(E, [r['he'] for r in rows], ls=(0, (4, 3)), color=C3, lw=1.7, marker='D', ms=3.5,
          label='급행 간격(오른쪽 축)')
 axr.axhline(30, color=C3, lw=0.9, alpha=0.5)
-axr.text(max(E) - 0.2, 32, '30분', fontsize=8.5, color=C3, ha='right')
+axr.text(max(E) - 0.2, 33, '30분', fontsize=8.5, color=C3, ha='right')
 axr.set_ylim(0, 160); axr.set_ylabel('급행 간격(분)', fontsize=9.5, color=C3)
 axr.tick_params(labelsize=9, colors=C3); axr.spines['top'].set_visible(False)
 axr.spines['right'].set_color(C3)
+
 r5 = next(r for r in rows if r['E'] == 5)
-# 권장 배정은 세로선으로 표시한다 — 데이터 점에 라벨을 붙이면 범례와 겹친다
 ax.axvline(5, color=C3, lw=1.1, ls=(0, (2, 2)), zorder=1)
 ax.text(5.35, 5.35, f"급행 5대 · 간격 {r5['he']:.1f}분 · 평균 {r5['net']:+.2f}분",
         fontsize=9.5, color=C3, fontweight='bold', va='top', ha='left')
@@ -142,36 +145,38 @@ h1, l1 = ax.get_legend_handles_labels(); h2, l2 = axr.get_legend_handles_labels(
 ax.legend(h1 + h2, l1 + l2, fontsize=8.8, frameon=False,
           loc='lower left', bbox_to_anchor=(0.03, 0.03))
 
-# 오른쪽 — 350 대 55번, 같은 조건(급행 간격 30분 이하 최소 대수)
-r350 = next(r for r in rows if r['he'] <= 30)
-r55 = next(r for r in m55['rows'] if r['he'] <= 30)
-lab = [f"350번\n급행 {r350['E']}대", f"55번\n급행 {r55['E']}대"]
-groups = [('급행 이용 가능', [r350['n_use'], r55['n_use']], C1),
-          ('급행 이용 불가', [r350['n_non'], r55['n_non']], C2),
-          ('전체 평균', [r350['net'], r55['net']], INK)]
-x = np.arange(2); w = 0.26
-for i, (nm, vals, col) in enumerate(groups):
-    b = ax2.bar(x + (i - 1) * w, vals, width=w, color=col, label=nm)
-    for xi, v in zip(x + (i - 1) * w, vals):
-        ax2.text(xi, v + (0.14 if v >= 0 else -0.42), f'{v:+.1f}', ha='center',
-                 fontsize=9, fontweight='bold', color=INK)
+# 오른쪽 — 급행이 아낀 시간을 어디에 쓰는가: 효과 대 탄소
+rA = next(r for r in mA['rows'] if r['E'] == 5)
+labs = ['A. 쉬지 않고\n더 돈다', 'B. 회차 여유로 둔다\n(제안)']
+eff = [rA['net'], r5['net']]
+co2 = [0.4, -3.7]          # x_carbon.py, e=1.1·13t·30km/h 기준
+x = np.arange(2); w = 0.34
+
+b1 = ax2.bar(x - w/2, eff, width=w, color=C1, label='통행당 평균 순효과(분)')
+b2 = ax2.bar(x + w/2, co2, width=w, color=C3, label='일일 탄소 변화(%)')
+for xi, v in zip(x - w/2, eff):
+    ax2.text(xi, v + 0.12, f'{v:+.2f}분', ha='center', fontsize=9.5, fontweight='bold', color=INK)
+for xi, v in zip(x + w/2, co2):
+    ax2.text(xi, v + (0.12 if v >= 0 else -0.45), f'{v:+.1f}%', ha='center',
+             fontsize=9.5, fontweight='bold', color=INK)
 ax2.axhline(0, color=INK2, lw=0.9)
-ax2.set_xticks(x); ax2.set_xticklabels(lab, fontsize=9.5, color=INK2, linespacing=1.5)
-ax2.set_ylim(-4.2, 5.4)
-ax2.set_title('같은 조건에서 350번이 적게 잃는다', fontsize=11, color=INK, pad=9)
-ax2.set_ylabel('통행당 순효과(분)', fontsize=9.5, color=INK2)
-ax2.legend(fontsize=8.8, frameon=False, loc='upper right')
+ax2.set_xticks(x); ax2.set_xticklabels(labs, fontsize=9.3, color=INK2, linespacing=1.5)
+ax2.set_ylim(-4.6, 2.2)
+# 분과 %는 단위가 달라 막대 높이를 서로 비교해서는 안 된다
+ax2.set_ylabel('왼쪽 막대 = 분 · 오른쪽 막대 = %  (서로 다른 단위)', fontsize=8.6, color=INK2)
+ax2.set_title('아낀 23분을 어디에 쓰는가', fontsize=11, color=INK, pad=9)
+ax2.legend(fontsize=8.6, frameon=False, loc='lower left')
 ax2.grid(axis='y', color=GRID, lw=0.7); ax2.set_axisbelow(True)
-for s in ('top', 'right', 'bottom'): ax2.spines[s].set_visible(False)
+for sp in ('top', 'right', 'bottom'): ax2.spines[sp].set_visible(False)
 ax2.tick_params(labelsize=9, colors=INK2, bottom=False)
 
-fig.suptitle('350번 무증차 재편 — 급행 5대에서 평균 +0.5분, 손해는 55번의 절반',
-             fontsize=13.5, color=INK, y=1.0, fontweight='bold')
+fig.suptitle('350번 무증차 재편 — 급행이 아낀 23분을 회차 여유로 두면 탄소가 줄고, 효과는 3.6초만 깎인다',
+             fontsize=13.0, color=INK, y=1.0, fontweight='bold')
 fig.text(0.5, -0.045,
-         f"350번 관측 19대·왕복 150분(10-14 첨두 실측, 완주 13대). 55번 관측 18대·왕복 195분. "
+         "350번 관측 19대·왕복 150분(10-14 첨두 실측, 완주 13대). 급행 왕복 127분. "
          f"정차 1회당 손실 {a.T:.0f}초·평균 통행 = 편도의 {a.trip*100:.0f}% 가정.\n"
-         f"급행 이용 가능 {m['p']*100:.0f}%는 승하차 기록 구성비 {m['cov']*100:.1f}%의 제곱(출발·도착 독립 가정)이며 "
-         "실제 승객 비율이 아니다. 오른쪽은 급행 간격 30분 이하가 되는 최소 대수끼리의 비교.",
+         f"급행 이용 가능 {mB['p']*100:.0f}%는 승하차 기록 구성비 {mB['cov']*100:.1f}%의 제곱(출발·도착 독립 가정)이며 "
+         "실제 승객 비율이 아니다. 탄소는 주행거리와 정차 횟수를 함께 센 값(x_carbon.py, e=1.1·13t·30km/h).",
          ha='center', fontsize=8.5, color=INK2, linespacing=1.7)
 fig.tight_layout()
 fig.savefig('figures/무증차_350.png', dpi=190, bbox_inches='tight', facecolor='white')
