@@ -325,7 +325,9 @@ row('분석도구<br>및 참고문헌', """
 <tr><td>도구</td><td>Python 3.14 (numpy, matplotlib) · Git · Claude (Anthropic) — Claude Code</td></tr>
 <tr><td>주요 산출</td><td>차량별 순번 추적, 10분 단위 고유차량 계수, 단조증가 완주 판정,
   연속 관측쌍 기준 첨두 분리, 대기시간 분포 E[gap²]/(2·E[gap]), 급행 대수 전수 계산, 민감도 분석</td></tr>
-<tr><td><b>코드</b></td><td class="blank"><b>[ GitHub 링크 기재 필요 ]</b></td></tr>
+<tr><td><b>코드</b></td><td><b>https://github.com/chocharles5678-png/seongnam-bus-express</b><br>
+  <span class="s">수집·분석·시뮬레이션·도면·보고서 생성 코드와 원시 관측 자료 전체를 공개했다.
+  인증키는 포함되지 않으며 <code>.env.example</code>에 필요한 변수명만 두었다.</span></td></tr>
 </table>
 <pre>python scripts/seongnam/x_collect_location.py 350 --interval 30 --minutes 240 --budget 500
 python scripts/seongnam/x_peak.py 20261014 --route 350
