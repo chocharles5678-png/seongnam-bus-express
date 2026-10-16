@@ -19,6 +19,9 @@ ap.add_argument('--T', type=float, default=20, help='정차 1회당 손실시간
 ap.add_argument('--fleet', type=int, default=18)
 ap.add_argument('--cycle', type=float, default=195)
 ap.add_argument('--trip', type=float, default=1/3, help='평균 통행 길이 = 편도의 이 비율 (가정)')
+ap.add_argument('--boarding', choices=('best', 'first', 'all'), default='best',
+                help="급행 이용 가능 통행의 탑승 규칙. best=총시간이 짧은 차(기본), "
+                     "first=먼저 오는 차, all=전원이 급행을 탄다고 가정(2026-10-16 이전 판. 틀렸다)")
 ap.add_argument('--keep-trips', action='store_true',
                 help='급행이 아낀 시간을 회차 여유로 두고 왕복 횟수를 현행과 같게 유지한다. '
                      '급행 간격이 cycle/E가 되며 총 주행거리가 늘지 않는다(탄소 비교용)')
@@ -47,12 +50,33 @@ W0 = wait([h0])
 print(f"■ {a.route}번 증차 시나리오  (완행 왕복 {a.cycle:.0f}분 · 급행 왕복 {CYC_E:.0f}분 · 정차손실 {a.T:.0f}초 가정)")
 print(f"  현행: 관측 {a.fleet}대 전부 완행 · 간격 {h0:.1f}분 · 대기 {W0:.1f}분")
 print(f"  급행 이용 가능 비중 {P_USE*100:.0f}% (기록 {p*100:.1f}% 의 제곱, 독립 가정) · 차내 단축 {GAIN:.1f}분\n")
+_RULE = {'best': '총시간이 짧은 차를 탄다', 'first': '먼저 오는 차를 탄다',
+         'all': '전원이 급행을 탄다고 가정 — 2026-10-16 이전 판. 틀렸다'}
+print(f'  탑승 규칙: {_RULE[a.boarding]}')
+print()
+
+# 급행 이용 가능 통행의 "유효 소요" = 대기 + 급행을 탔을 때만 생기는 차내 증분.
+# 두 항은 같은 탑승 선택에 묶여 있다 — 완행을 탄 사람에게 차내 단축을 줄 수 없다.
+# 2026-10-16 이전 판은 합산 대기(먼저 오는 차)와 전원 차내단축을 동시에 더해 부호가 뒤집혔다.
+_GR = (np.arange(2000) + 0.5) / 2000.0
+
+def eff_use(h_e, h_l, rule):
+    if not h_e:
+        return wait([h_l])
+    if rule == 'all':
+        return wait([h_e, h_l]) - GAIN          # 옛 가정(틀림)
+    wl = (_GR * h_l)[:, None]
+    we = (_GR * h_e)[None, :]
+    v = np.minimum(wl, we - GAIN) if rule == 'best' else np.where(we < wl, we - GAIN, wl)
+    return float(v.mean())
+
 
 def net(h_e, h_l):
-    w_use = wait([h_e, h_l]) if h_e else wait([h_l])
+    e_use = eff_use(h_e, h_l, a.boarding)
     w_non = wait([h_l])
-    n_use = GAIN - (w_use - W0)
+    n_use = W0 - e_use
     n_non = -(w_non - W0)
+    w_use = wait([h_e, h_l]) if h_e else w_non   # 표시용 참고값
     return w_use, w_non, n_use, n_non, P_USE * n_use + (1 - P_USE) * n_non
 
 print(f'■ A. 무증차 — 기존 {a.fleet}대를 나눈다' + ('  [왕복 횟수 유지: 급행은 아낀 시간을 회차 여유로 둔다]' if a.keep_trips else ''))
