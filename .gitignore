@@ -54,3 +54,4 @@ lsPopLayer.js
 자료전달_*.md
 *.bak
 1차 초안.pdf
+data/raw/bus_location/.plate_map.json
