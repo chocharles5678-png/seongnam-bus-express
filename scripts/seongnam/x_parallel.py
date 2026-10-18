@@ -32,6 +32,11 @@ ap.add_argument('--minrun', type=int, default=3, help='병행으로 셀 최소 �
 ap.add_argument('--turn', type=int, default=44, help='회차 직전 순서 (상행 1..turn)')
 ap.add_argument('--maxlocal', type=float, default=2.0,
                 help='완행 간격 상한 = 현행의 이 배수. 넘기면 모퉁이 해가 나온다')
+ap.add_argument('--detail', type=int, default=0, help='통과 지점 상세를 상위 N개까지 출력한다')
+ap.add_argument('--keep-trips', action='store_true',
+                help='운영 방식 B — 급행이 아낀 시간을 회차 여유로 두고 왕복 횟수를 유지한다. '
+                     '급행 간격이 cycle/E가 되어 넓어지는 대신 총 주행거리가 늘지 않는다. '
+                     '본문 제안은 B다')
 a = ap.parse_args()
 
 RT = {r['노선ID']: r for r in csv.DictReader(open('express_bus/clean/노선.csv', encoding='utf-8-sig'))}
@@ -136,7 +141,9 @@ def evaluate(stopset, E):
     P_USE = p * p                                # 출발·도착 모두 급행 정차 (독립 가정)
     GAIN = SKIP / 2 * a.T / 60 * a.trip
     hl = a.cycle / (a.fleet - E)
-    he = (a.cycle - SKIP * a.T / 60) / E
+    # 차내 단축(GAIN)은 실제 주행이 빨라진 결과라 어느 방식이든 같다.
+    # 급행 간격만 달라진다 — B는 아낀 시간을 회차 여유로 쓰므로 완행과 같은 주기로 돈다.
+    he = (a.cycle if a.keep_trips else a.cycle - SKIP * a.T / 60) / E
     # 1. 급행 이용 가능 — 완행 대기와 (급행 대기 - 차내단축) 중 작은 쪽
     g1 = W0 - float(np.minimum((_G * hl)[:, None], (_G * he)[None, :] - GAIN).mean())
     sq = s1 = wq = w1 = 0.0
@@ -171,6 +178,22 @@ print(f'  목적지 대체 비중 q   이용량 가중 {qw:.3f}'
       f'  중앙값 {statistics.median([x["q"] for x in pas]):.3f}'
       f'  최소 {min(x["q"] for x in pas):.3f}')
 print(f'  → 통과 지점 이용의 {(1 - qw) * 100:.1f}%는 병행으로 대체되지 않는다')
+
+if a.detail:
+    t1q = sum(x['vol'] * (1 - x['q']) for x in pas)
+    print(f'\n■ 대체 없는 이용량이 큰 통과 지점 상위 {a.detail}개 (합계의 몫)')
+    print(f"{'정류소':28}{'병행수':>7}{'q':>7}{'일평균':>9}{'(1-q)×이용':>12}{'몫':>7}")
+    for x in sorted(pas, key=lambda x: -x['vol'] * (1 - x['q']))[:a.detail]:
+        print(f'{x["name"][:26]:28}{x["n"]:>7.0f}{x["q"]:>7.2f}{x["vol"]:>9.0f}'
+              f'{x["vol"] * (1 - x["q"]):>12.0f}{x["vol"] * (1 - x["q"]) / t1q * 100:>6.1f}%')
+    print(f'\n■ q 가 가장 낮은 통과 지점 상위 {a.detail}개 — 병행이 가는 곳이 가장 좁다')
+    print(f"{'정류소':28}{'병행수':>7}{'q':>7}{'일평균':>9}")
+    for x in sorted(pas, key=lambda x: x['q'])[:a.detail]:
+        print(f'{x["name"][:26]:28}{x["n"]:>7.0f}{x["q"]:>7.2f}{x["vol"]:>9.0f}')
+    print(f'\n■ 병행이 1개뿐인 통과 지점')
+    print(f"{'정류소':28}{'병행수':>7}{'q':>7}{'일평균':>9}")
+    for x in sorted([y for y in pas if y['n'] <= 1], key=lambda x: -x['vol']):
+        print(f'{x["name"][:26]:28}{x["n"]:>7.0f}{x["q"]:>7.2f}{x["vol"]:>9.0f}')
 
 print(f'\n■ 집단별 손익 (병행 1개 {a.hp:.0f}분 가정 · 현행 대기 {W0:.2f}분 ·'
       f' 기본 정차표 {len(BASE)}지점)')

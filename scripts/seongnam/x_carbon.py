@@ -29,6 +29,8 @@ ap.add_argument('--cycle', type=float, default=150.0, help='완행 왕복 실측
 ap.add_argument('--km', type=float, default=40.0, help='왕복 거리(km) — 정류소 좌표 기반 추정')
 ap.add_argument('--vkt', type=float, default=222.4, help='대당 일평균 주행(km) — 교통안전공단 2022')
 ap.add_argument('--T', type=float, default=20, help='정차 1회당 손실시간(초) — 체류시간으로도 쓴다')
+ap.add_argument('--peak-hours', type=float, default=2.0,
+                help='첨두 시범운행 시간. 전일 전면 시행과 이 범위만 시행하는 경우를 함께 낸다')
 a = ap.parse_args()
 
 CNG_MJ, CNG_CO2, IDLE_KG_H = 50.0, 2.75, 0.4     # MJ/kg, kgCO2/kg, 공회전 kg/h
@@ -98,10 +100,28 @@ for e_tot in (1.0, 1.1, 1.3):
         A = a_km * cruise + a_stop * s
         B = b_km * cruise + b_stop * s
         rows.append((A / now - 1, B / now - 1))
+        if abs(e_tot - 1.1) < 1e-9 and lab == '중간':
+            MAIN = (A / now - 1, B / now - 1)      # 본문이 쓰는 가정
         print(f'  e={e_tot:.1f} {lab}({m//1000}t {v}km/h){" ":6}{now:>9.0f}kg'
               f'{A-now:>+10.0f}kg({A/now-1:+.1%}){B-now:>+10.0f}kg({B/now-1:+.1%})')
 lo_a, hi_a = min(r[0] for r in rows), max(r[0] for r in rows)
 lo_b, hi_b = min(r[1] for r in rows), max(r[1] for r in rows)
 print(f'\n  → A 쉬지않고 {lo_a:+.1%} ~ {hi_a:+.1%}   |   B 횟수유지 {lo_b:+.1%} ~ {hi_b:+.1%}')
+
+# ── 적용 범위 — 제안이 첨두 2시간 시범운행이면 전일 기준 수치를 그대로 쓸 수 없다
+rt_day = a.vkt / a.km                       # 대당 일평균 왕복 횟수
+rt_peak = a.peak_hours * 60 / a.cycle       # 첨두 중 한 대가 도는 왕복 횟수
+share = rt_peak / rt_day
+hours_day = rt_day * a.cycle / 60
+print(f'\n■ 4. 적용 범위 — 전일 전면 시행 vs 첨두 {a.peak_hours:g}시간 시범')
+print(f'  대당 일평균 왕복 {rt_day:.2f}회 (= {a.vkt:.1f}km ÷ {a.km:.0f}km) → 일 운행 약 {hours_day:.1f}시간')
+print(f'  첨두 {a.peak_hours:g}시간에 한 대가 도는 왕복 {rt_peak:.2f}회 → '
+      f'전일 운행의 {share:.1%}')
+print(f'  {"":14}{"전일 전면":>12}{"첨두 "+format(a.peak_hours,"g")+"시간":>12}')
+print(f'  {"정차 감소":14}{b_stop/base_stop-1:>11.1%}{(b_stop/base_stop-1)*share:>11.1%}')
+print(f'  {"탄소 (본문 가정)":14}{MAIN[1]:>11.1%}{MAIN[1]*share:>11.2%}')
+print(f'  {"탄소 (범위)":14}{f"{lo_b:+.1%} ~ {hi_b:+.1%}":>14}'
+      f'{f"{lo_b*share:+.2%} ~ {hi_b*share:+.2%}":>16}')
+print('\n※ 범위를 섞지 말 것. 제안이 첨두 시범운행이면 오른쪽 열을 쓴다.')
 print('\n※ 상한 추정이다. 신호·정체로 어차피 멈추는 경우를 빼지 않았고, 350번의 실제 연료를'
       '\n   확인하지 않아 경기 사업형 승합 CNG 통계를 대리값으로 썼다.')
