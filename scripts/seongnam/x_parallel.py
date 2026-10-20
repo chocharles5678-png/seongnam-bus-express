@@ -17,7 +17,7 @@
   1단계만 하고 q를 빼면 "완행을 없앨수록 좋다"는 결론이 나온다. 병행을 완전 대체재로
   취급한 결과이고, 조건부 분해로 막는다.
 """
-import csv, io, sys, argparse, collections, statistics
+import csv, io, json, sys, argparse, collections, statistics
 import numpy as np
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
 
@@ -29,7 +29,9 @@ ap.add_argument('--T', type=float, default=20, help='정차 1회당 손실시간
 ap.add_argument('--trip', type=float, default=1/3, help='평균 통행 길이 = 편도의 이 비율 (가정)')
 ap.add_argument('--hp', type=float, default=20.0, help='병행 노선 1개의 배차 간격(분) — 가정값')
 ap.add_argument('--minrun', type=int, default=3, help='병행으로 셀 최소 연속 공유 정차 수')
-ap.add_argument('--turn', type=int, default=44, help='회차 직전 순서 (상행 1..turn)')
+ap.add_argument('--turn', type=int, default=45,
+                help='회차점 순서. 상행은 1..turn, 하행은 turn..끝이다. 회차점은 종점이자 '
+                     '주요 목적지이므로 상행 승객의 목적지 집합에 포함해야 한다')
 ap.add_argument('--maxlocal', type=float, default=2.0,
                 help='완행 간격 상한 = 현행의 이 배수. 넘기면 모퉁이 해가 나온다')
 ap.add_argument('--detail', type=int, default=0, help='통과 지점 상세를 상위 N개까지 출력한다')
@@ -121,6 +123,26 @@ NA = sum(x['k'] for x in PT)
 TOT = sum(x['vol'] for x in PT)
 H0 = a.cycle / a.fleet
 
+# 도면 생성기(x_report_fig350.py)가 같은 q를 쓰도록 내보낸다. 계산을 두 벌 두지 않는다.
+QOUT = f'data/par_q_{a.route}.json'
+json.dump(dict(route=a.route, turn=a.turn, minrun=a.minrun, hp=a.hp,
+               stops=[{k: x[k] for k in ('name', 'k', 'vol', 'base', 'q', 'n')} for x in PT]),
+          io.open(QOUT, 'w', encoding='utf-8'), ensure_ascii=False, indent=1)
+
+
+def p_express(a_loc, b_exp, S):
+    """P(급행 선택) = P(급행 잔여대기 − S < 완행 잔여대기), 둘 다 균등분포
+
+    간편식 (a/2 + S)/b 는 a+S <= b 에서만 맞는다. 급행 간격이 좁아져 그 조건이
+    깨지면 적분이 포화되므로 일반식을 쓴다. 350번은 급행 9대부터 깨진다.
+    """
+    if S >= b_exp:
+        return 1.0
+    if a_loc + S <= b_exp:
+        return (a_loc / 2 + S) / b_exp
+    c = b_exp - S
+    return ((c * c / 2 + S * c) / b_exp + (a_loc - c)) / a_loc
+
 
 def wait(hs, H=1800):
     arr = np.sort(np.concatenate([np.arange(0, H, h) for h in hs if h and h > 0]))
@@ -163,7 +185,7 @@ def evaluate(stopset, E):
                 g3=(s1 / w1 if w1 > 1e-9 else 0.0),
                 sh3=((1 - P_USE) * w1 / VT if VT > 0 else 0.0),
                 tot=(P_USE * g1 + (1 - P_USE) * (sq + s1) / VT if VT > 0 else P_USE * g1),
-                pch=min(1.0, (hl / 2 + GAIN) / he))
+                pch=p_express(hl, he, GAIN))
 
 
 BASE = {x['name'] for x in PT if x['base']}
@@ -211,19 +233,26 @@ ORD = {'대체없는 이용량': lambda x: -x['vol'] * (1 - x['q']) / x['k'],
        'q 낮은 순': lambda x: (x['q'], -x['vol']),
        '이용량 많은 순': lambda x: -x['vol'] / x['k'],
        '병행 적은 순': lambda x: (x['n'], -x['vol'])}
-print(f'\n■ 전수 탐색 — 급행 1~{EMAX}대 × 정차 추가 0~{len(pas)} × 정렬 {len(ORD)}종')
+print(f'\n■ 제한 탐색 — 급행 1~{EMAX}대 × 정차 추가 0~{len(pas)} × 정렬 {len(ORD)}종')
 print(f'  유효범위: 완행 간격 ≤ {LIM:.1f}분 (현행의 {a.maxlocal:g}배). 넘기면 병행을 완전'
       f' 대체재로 취급한 모퉁이 해가 나온다')
-allr = []
+allr, uniq, tabs = [], set(), set()
 for lab, key in ORD.items():
     cand = sorted(pas, key=key)
     for E in range(1, EMAX + 1):
         for k in range(len(cand) + 1):
-            r = evaluate(BASE | {x['name'] for x in cand[:k]}, E)
+            ss = BASE | {x['name'] for x in cand[:k]}
+            r = evaluate(ss, E)
             r['ord'] = lab
             allr.append(r)
+            uniq.add((E, frozenset(ss)))
+            tabs.add(frozenset(ss))
 good = [r for r in allr if min(r['g1'], r['g2'], r['g3']) >= -1e-9]
-print(f'  조합 {len(allr):,}개 중 모든 집단이 손해를 안 보는 설계: {len(good)}개')
+print(f'  조건 {len(allr):,}개 = 고유 설계 {len(uniq):,}개 + 중복 {len(allr)-len(uniq):,}개'
+      f'  (고유 정차표 {len(tabs)}개)')
+print(f'  모든 집단이 손해를 안 보는 설계: {len(good)}개')
+print(f'  ※ 가능한 정차표 조합은 2^{len(pas)} ≈ {2.0**len(pas):.2g}개다. 네 정렬 기준을 따라간')
+print(f'    {len(tabs)}개({len(tabs)/2.0**len(pas)*100:.1g}%)만 본 제한 탐색이므로 불가능성 증명이 아니다.')
 
 print('\n■ 3번 집단(대체 없음)의 손해를 묶었을 때 얻을 수 있는 평균')
 print(f"{'③ 손해 상한':>12}{'급행':>5}{'지점':>5}{'커버':>7}{'③비중':>7}"
