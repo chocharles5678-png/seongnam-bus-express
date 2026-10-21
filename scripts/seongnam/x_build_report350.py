@@ -361,8 +361,9 @@ table.form { width:100%; border-collapse:collapse; }
 table.form > tbody > tr > th { width:26mm; background:#f4f5f7; border:1px solid #9aa0a6;
        font-size:8.9pt; font-weight:700; vertical-align:middle; text-align:center; padding:5px 3px; line-height:1.35; }
 table.form > tbody > tr > td { border:1px solid #9aa0a6; padding:6px 8px; vertical-align:top; }
-tr { page-break-inside: avoid; }
-tr.figs { page-break-inside: auto; }
+/* 서식 행이 한 쪽보다 길어 avoid 를 걸면 통째로 밀려 빈 공간이 생긴다. 쪼개 흘린다. */
+tr { page-break-inside: auto; }
+table.d { page-break-inside: avoid; }   /* 자료 표는 쪼개지 않는다 */
 h4 { font-size:9.4pt; margin:8px 0 3px; padding-left:6px; border-left:3px solid #2a78d6; }
 td > h4:first-child { margin-top:1px; }
 p { margin:3px 0; }
