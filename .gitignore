@@ -55,3 +55,6 @@ lsPopLayer.js
 *.bak
 1차 초안.pdf
 data/raw/bus_location/.plate_map.json
+
+# 참가신청서 — 개인정보(이름·이메일·연락처) 포함. 공개 저장소에 올리지 않는다
+output/*참가신청서*
