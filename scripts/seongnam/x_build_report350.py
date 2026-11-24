@@ -13,14 +13,12 @@ FIGS = [
     ('figures/배차역설_4개노선.png', '그림 1',
      '배차 역설 — 최선값의 순서가 현행 배차 순서와 정확히 일치한다. 네 노선 모두 음수다',
      '네 노선을 같은 틀로 실측하고 같은 탑승 규칙(§7-3)으로 비교했다. 각 노선에서 평균 순효과가 '
-     '가장 높은 배정을 표시했고 −2.93 → −0.69 → −0.18 → −0.12분으로 현행 배차 24.5 → 18.7 → '
-     '11.1 → 7.9분 순서와 같다. 병행 노선 보완은 350번에만 실측해 이 도면에는 넣지 않았다.'),
+     '가장 높은 배정을 표시했다. 병행 노선 보완은 350번에만 적용해 이 도면에서는 뺐다.'),
     ('figures/무증차_350.png', '그림 2',
      '350번 무증차 재편 — 평균은 0 근처이고, 이득과 손해가 집단별로 갈린다',
      '왼쪽은 급행 배정 대수별 집단 손익과 급행 간격(운영 방식 B · 병행 노선 반영). 급행을 늘릴수록 '
      '①의 이득과 ③의 손해가 함께 커지고 전체 평균은 0 근처에 머문다. 오른쪽은 아낀 23분을 '
-     '더 도는 데 쓸 때(A)와 회차 여유로 둘 때(B)의 효과·탄소 비교이며 막대의 단위가 서로 다르다. '
-     '집단 비중은 정류소 기록으로 가중한 모형 비중이지 실제 수혜·피해 인구 비율이 아니다.'),
+     '더 도는 데 쓸 때(A)와 회차 여유로 둘 때(B)의 효과·탄소 비교이며 막대의 단위가 서로 다르다.'),
 ]
 
 ROWS = []
@@ -172,7 +170,7 @@ GBIS 명세 원문에서 확인하고 관련 주장 4건을 철회했다. <b>②
 완주 2대 136분에서 관측창 확대 후 완주 13대 150분이 됐다. <b>③ 외부 검토자의 독립 구현이 모형 자체의
 오류를 잡았다</b> — 전수 계산과 민감도로는 드러나지 않는 종류였다(§7-3).
 <b>AI가 낸 수치는 어느 것도 이 세 장치를 통과하기 전에 결론으로 쓰지 않았다.</b></p>
-""")
+""", 'tall')
 
 row('분석 내용<br>및 결과', """
 <h4>7-1. 네 노선 실측 — 갈림길은 배차 하나다</h4>
@@ -255,7 +253,7 @@ row('분석 내용<br>및 결과', """
 <p class="warn"><b>본문은 제안 범위와 같은 전일 기준 −3.7%를 쓴다.</b> 적용 범위를 섞으면 같은 제안의
 탄소 효과가 7배까지 달라진다. 환산 근거 — 222.4 km ÷ 왕복 40 km = 일 5.56 왕복, 첨두 2시간은
 120 ÷ 150 = 0.80 왕복이므로 전일 운행의 <b>14.4%</b>다.</p>
-""")
+""", 'tall')
 
 row('정책제안<br>및 기대효과', """
 <div class="box">
@@ -307,9 +305,6 @@ row('정책제안<br>및 기대효과', """
   행선지로 세어야 한다</b>는 것을 q로 보였다. 병행 1개인 공장지대(q 0.75~1.00)가 병행 2~5개인
   운중동·낙생(q 0.56~0.64)보다 안전했다.</li>
 </ul>
-<p class="warn"><b>제시하지 않는 것.</b> 수혜 인원, 승용차 전환 수요, 탄소 절대 감축량(tCO₂)은 산출하지
-않았다. 노선별 OD와 배출계수를 확보하지 못했기 때문이다. <b>추정값을 제시하지 않는 것이 이 보고서의
-원칙이다.</b></p>
 """)
 
 row('분석도구<br>및 참고문헌', """
@@ -352,21 +347,27 @@ CSS = """
 @page { size: A4; margin: 12mm 11mm; }
 * { box-sizing: border-box; }
 body { font-family: "Malgun Gothic","맑은 고딕",sans-serif; color:#111; margin:0;
-       font-size:8.8pt; line-height:1.48; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+       font-size:8.8pt; line-height:1.45; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
 .wrap { max-width: 188mm; margin: 0 auto; padding: 3mm 0; }
 .head { text-align:center; border-bottom:2px solid #111; padding-bottom:4px; margin-bottom:7px; }
 .head .ev { font-size:8.4pt; color:#52514e; letter-spacing:.02em; }
 .head h1 { font-size:15pt; margin:3px 0 0; letter-spacing:.2em; }
 table.form { width:100%; border-collapse:collapse; }
 table.form > tbody > tr > th { width:26mm; background:#f4f5f7; border:1px solid #9aa0a6;
-       font-size:8.9pt; font-weight:700; vertical-align:middle; text-align:center; padding:5px 3px; line-height:1.35; }
+       font-size:8.9pt; font-weight:700; vertical-align:middle; text-align:center;
+       padding:7px 3px; line-height:1.35; }
+/* 여러 쪽에 걸치는 긴 항목은 라벨을 위쪽에 붙여 본문 첫 줄과 나란히 둔다 */
+table.form > tbody > tr.tall > th { vertical-align:top; padding-top:9px; }
 table.form > tbody > tr > td { border:1px solid #9aa0a6; padding:6px 8px; vertical-align:top; }
-/* 서식 행이 한 쪽보다 길어 avoid 를 걸면 통째로 밀려 빈 공간이 생긴다. 쪼개 흘린다. */
+/* 한 쪽보다 긴 블록에 avoid 를 걸면 통째로 밀려 빈 공간이 생긴다.
+   수치 결과표만 지키고 나머지는 쪼개 흘린다. */
 tr { page-break-inside: auto; }
-table.d { page-break-inside: avoid; }   /* 자료 표는 쪼개지 않는다 */
-h4 { font-size:9.4pt; margin:8px 0 3px; padding-left:6px; border-left:3px solid #2a78d6; }
+table.d { page-break-inside: auto; }
+table.d.n { page-break-inside: avoid; }      /* 수치 결과표는 쪼개지 않는다 */
+table.d thead, table.d tr:first-child { page-break-after: avoid; }  /* 머리행만 남고 끊기지 않게 */
+h4 { font-size:9.4pt; margin:5px 0 2px; padding-left:6px; border-left:3px solid #2a78d6; }
 td > h4:first-child { margin-top:1px; }
-p { margin:3px 0; }
+p { margin:2px 0; }
 p.lead { font-size:10.2pt; font-weight:700; margin:1px 0 4px; line-height:1.4; }
 p.big { background:#f2f5fa; border-left:3px solid #2a78d6; padding:5px 8px; margin:5px 0; font-size:9.1pt; }
 p.note { background:#fff8e6; border:1px solid #e8d9a8; padding:4px 7px; margin:4px 0; font-size:8.3pt; }
@@ -395,9 +396,11 @@ td.ok { color:#1d6b2c; font-weight:700; } td.no { color:#b4341a; font-weight:700
 .s { color:#52514e; font-size:7.7pt; }
 .blank { color:#b4341a; font-weight:700; }
 .add { font-weight:400; font-size:8pt; color:#52514e; }
-figure { margin:0 0 7px; page-break-inside:avoid; }
-figure img { width:100%; border:1px solid #d8dade; display:block; }
-figcaption { font-size:7.9pt; color:#333; padding-top:3px; line-height:1.42; }
+figure { margin:0 0 2px; page-break-inside:avoid; }
+figure img { width:94%; border:1px solid #d8dade; display:block; margin:0 auto; }
+/* 2패널 도면은 여유가 있어 더 줄여도 읽힌다 — 두 도면을 같은 쪽에 넣기 위한 조정 */
+figure:last-of-type img { width:74%; }
+figcaption { font-size:7.9pt; color:#333; padding-top:2px; line-height:1.38; }
 """
 
 body = '\n'.join(

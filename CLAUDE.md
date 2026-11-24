@@ -2,6 +2,11 @@
 
 Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
+> **이 저장소에서 일하기 전에 [`AGENTS.md`](AGENTS.md) 를 읽을 것.**
+> 폴더 구조, 스크립트 실행 순서, 이미 틀렸던 10건, 쓰면 안 되는 표현이 거기 있다.
+>
+> 자료를 수집할 때는 `/opendata-collect`, 수치로 모형을 세울 때는 `/quant-model-audit` 스킬을 쓴다.
+
 **Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
 ## 1. Think Before Coding
